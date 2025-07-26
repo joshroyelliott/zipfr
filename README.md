@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📊 Zipfr
+# Zipfr
 
 **A blazingly fast Zipfian text analysis tool with interactive TUI**
 
@@ -19,6 +19,11 @@
 Zipfr is a high-performance command-line tool for analyzing text according to **Zipf's law** - the observation that word frequency follows a power-law distribution. Built in Rust for speed and reliability, it features an interactive terminal interface with real-time visualization.
 
 > **Zipf's Law**: In natural language, the frequency of any word is inversely proportional to its rank. The most frequent word appears ~2× more than the 2nd, ~3× more than the 3rd, and so on.
+
+
+<div align="center">
+  <img src="images/zipfr_screenshot.png" alt="TUI screenshot">
+</div>
 
 ## ✨ Features
 
