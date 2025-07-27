@@ -1,0 +1,87 @@
+# Zipfr Tag Configuration
+# This file defines word tags for filtering and analysis
+
+[tags.stopwords]
+name = "Stop Words"
+color = "gray"
+description = "Common function words that carry little semantic meaning"
+words = [
+    # Articles
+    "a", "an", "the",
+    # Conjunctions
+    "and", "or", "but", "nor", "for", "so", "yet",
+    # Prepositions
+    "in", "on", "at", "to", "for", "of", "with", "by", "from", "up", "about", "into", "through", "during", "before", "after", "above", "below", "between", "among", "under", "over",
+    # Pronouns
+    "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them", "my", "your", "his", "her", "its", "our", "their", "mine", "yours", "hers", "ours", "theirs",
+    # Auxiliary verbs
+    "is", "are", "was", "were", "be", "been", "being", "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might", "must", "can", "shall",
+    # Common adverbs
+    "not", "no", "yes", "very", "too", "so", "just", "now", "then", "here", "there", "where", "when", "why", "how", "all", "any", "both", "each", "few", "more", "most", "other", "some", "such",
+    # Question words
+    "what", "which", "who", "whom", "whose", "where", "when", "why", "how",
+    # Other common words
+    "that", "this", "these", "those", "than", "as", "if", "because", "while", "since", "until", "unless", "although", "though", "whether", "either", "neither", "both"
+]
+
+[tags.sentiment_positive]
+name = "Positive"
+color = "green"
+description = "Words with positive sentiment or connotation"
+words = [
+    "good", "great", "excellent", "amazing", "wonderful", "fantastic", "awesome", "brilliant", "outstanding", "superb",
+    "love", "like", "enjoy", "appreciate", "adore", "cherish", "treasure", "value",
+    "happy", "joy", "pleased", "delighted", "thrilled", "excited", "cheerful", "glad",
+    "beautiful", "gorgeous", "stunning", "magnificent", "splendid", "marvelous",
+    "perfect", "ideal", "flawless", "exceptional", "remarkable", "incredible",
+    "success", "triumph", "victory", "achievement", "accomplishment", "win"
+]
+
+[tags.sentiment_negative]
+name = "Negative"
+color = "red"
+description = "Words with negative sentiment or connotation"
+words = [
+    "bad", "terrible", "awful", "horrible", "dreadful", "appalling", "atrocious", "disgusting", "revolting",
+    "hate", "dislike", "despise", "loathe", "detest", "abhor",
+    "sad", "unhappy", "miserable", "depressed", "gloomy", "melancholy", "sorrowful", "grief",
+    "ugly", "hideous", "repulsive", "grotesque", "unsightly",
+    "wrong", "incorrect", "false", "mistaken", "erroneous", "faulty", "flawed",
+    "failure", "defeat", "loss", "disaster", "catastrophe", "tragedy", "problem", "trouble", "difficulty"
+]
+
+[tags.academic]
+name = "Academic"
+color = "blue"
+description = "Academic and scholarly terminology"
+words = [
+    "research", "study", "analysis", "methodology", "hypothesis", "theory", "conclusion", "findings",
+    "data", "evidence", "proof", "statistics", "correlation", "causation", "significance",
+    "experiment", "observation", "survey", "interview", "questionnaire", "sample", "population",
+    "literature", "review", "citation", "reference", "bibliography", "publication", "journal",
+    "abstract", "introduction", "discussion", "results", "implications", "limitations",
+    "academic", "scholarly", "scientific", "empirical", "theoretical", "conceptual", "framework"
+]
+
+[tags.temporal]
+name = "Temporal"
+color = "yellow"
+description = "Time-related words and expressions"
+words = [
+    "time", "moment", "instant", "second", "minute", "hour", "day", "week", "month", "year", "decade", "century",
+    "today", "yesterday", "tomorrow", "now", "then", "soon", "later", "early", "late", "recent", "past", "future", "present",
+    "before", "after", "during", "while", "until", "since", "when", "whenever", "always", "never", "sometimes", "often", "rarely", "seldom",
+    "first", "last", "next", "previous", "current", "former", "latter", "initial", "final", "ongoing", "temporary", "permanent"
+]
+
+[tags.quantitative]
+name = "Quantitative"
+color = "cyan"
+description = "Numbers, quantities, and measurement terms"
+words = [
+    "number", "count", "amount", "quantity", "total", "sum", "average", "mean", "median", "mode",
+    "percent", "percentage", "ratio", "proportion", "fraction", "decimal", "integer", "digit",
+    "measure", "measurement", "size", "length", "width", "height", "depth", "area", "volume", "weight", "mass",
+    "increase", "decrease", "growth", "decline", "rise", "fall", "change", "difference", "comparison",
+    "more", "less", "most", "least", "many", "few", "several", "multiple", "single", "double", "triple"
+]

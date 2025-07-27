@@ -6,7 +6,7 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 use std::io;
 use std::time::Instant;
-use zipfr::{analyzer::WordAnalyzer, cli::Args, parser::TextParser, tui::App};
+use zipfr::{analyzer::{WordAnalyzer, TagMatcher}, cli::Args, parser::TextParser, tui::App};
 
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
@@ -25,7 +25,15 @@ fn main() -> anyhow::Result<()> {
     let parse_duration = parse_start.elapsed();
     
     let analyze_start = Instant::now();
-    let mut analyzer = WordAnalyzer::new();
+    
+    // Try to load tags configuration
+    let mut analyzer = if let Ok(tag_matcher) = TagMatcher::from_config("tags.toml") {
+        WordAnalyzer::with_tags(tag_matcher)
+    } else {
+        // Fall back to analyzer without tags if config file doesn't exist
+        WordAnalyzer::new()
+    };
+    
     let word_counts = analyzer.analyze(words);
     let analyze_duration = analyze_start.elapsed();
     

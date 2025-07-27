@@ -63,6 +63,21 @@ Zipfr is a high-performance command-line tool for analyzing text according to **
 - **Clean text parsing** handling punctuation and normalization
 - **Real-time performance metrics**
 
+### 🏷️ **Intelligent Tagging & Filtering System**
+- **Comprehensive word tagging** with 6 built-in categories:
+  - **Stop Words**: Common function words (the, and, of, etc.)
+  - **Sentiment**: Positive and negative emotional words
+  - **Academic**: Scholarly and technical terminology
+  - **Temporal**: Time-related words (now, then, during, etc.)
+  - **Quantitative**: Numbers and measurement words
+- **Visual tag indicators** showing `[S,P,A]` letters with color coding
+- **Intuitive two-step filtering**:
+  - **Step 1**: Select tag category (`F` → number)
+  - **Step 2**: Choose exclude (hide) or include (show only)
+- **Quick stop word toggle** (`S`) for instant common word filtering
+- **TOML-based configuration** for easy tag customization
+- **Zero performance impact** - tags applied once during analysis
+
 ## 🛠 Installation
 
 ### Prerequisites
@@ -124,6 +139,25 @@ zipfr document.txt
 zipfr document.txt --no-interactive --output analysis.csv
 ```
 
+### Tag Filtering Examples
+```bash
+# 1. Launch analysis and filter out common words
+zipfr document.txt
+# In TUI: Press 'S' to quickly hide stop words
+
+# 2. Focus on positive sentiment words only
+zipfr document.txt  
+# In TUI: Press 'F' → '2' → 'i' to show only positive words
+
+# 3. Exclude academic jargon for readability analysis
+zipfr document.txt
+# In TUI: Press 'F' → '4' → 'e' to hide academic terms
+
+# 4. Analyze temporal language patterns
+zipfr document.txt
+# In TUI: Press 'F' → '5' → 'i' to show only temporal words
+```
+
 ### Interactive Features
 <div align="center">
 
@@ -143,6 +177,10 @@ zipfr document.txt --no-interactive --output analysis.csv
 | `L` | Log Scale | Toggle log-log visualization |
 | `A` | Chart Scope | Toggle: Visible Range ↔ All Data |
 | `Z` | Zipf Lines | Cycle: Off → Absolute → Relative |
+| **Filtering** | | |
+| `F` | Filter Menu | Two-step tag filtering interface |
+| `S` | Stop Words | Quick toggle stop word filter |
+| `c` | Clear | Clear all active filters |
 | **General** | | |
 | `q` | Quit | Exit application |
 
@@ -186,6 +224,35 @@ Options:
   -V, --version                Print version
 ```
 
+## 🏷️ Tag Configuration
+
+Zipfr uses a `tags.toml` file to define word categories. The default configuration includes:
+
+```toml
+[[tags]]
+name = "Stop Words"
+letter = "S"
+words = ["the", "and", "of", "to", "a", "in", "is", "it", "you", "that", ...]
+
+[[tags]]
+name = "Positive"
+letter = "P" 
+words = ["good", "great", "excellent", "amazing", "wonderful", "fantastic", ...]
+
+[[tags]]
+name = "Negative"
+letter = "N"
+words = ["bad", "terrible", "awful", "horrible", "disappointing", ...]
+
+# ... additional tag categories
+```
+
+### Customizing Tags
+1. **Edit existing tags**: Modify word lists in `tags.toml`
+2. **Add new categories**: Create new `[[tags]]` sections
+3. **Visual indicators**: Each tag shows its letter in the word list (`[S,P,A]`)
+4. **Performance**: Tags are loaded once at startup for optimal speed
+
 ## 🏗 Architecture
 
 <details>
@@ -228,6 +295,8 @@ cargo fmt                # Format code
 - **[ratatui](https://crates.io/crates/ratatui)** - Terminal UI framework
 - **[crossterm](https://crates.io/crates/crossterm)** - Cross-platform terminal
 - **[anyhow](https://crates.io/crates/anyhow)** - Error handling
+- **[serde](https://crates.io/crates/serde)** - Serialization for tag configuration
+- **[toml](https://crates.io/crates/toml)** - TOML parsing for tag definitions
 
 ## 🤝 Contributing
 
@@ -247,15 +316,21 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - [x] **Dual-scope analysis** - Micro and macro view capabilities
 - [x] **Advanced search** - Fuzzy matching with navigation
 - [x] **Chart-list synchronization** - Perfect spatial alignment
+- [x] **Intelligent tagging system** - 6 built-in tag categories with visual indicators
+- [x] **Two-step filtering interface** - Intuitive exclude/include workflow
+- [x] **TOML-based tag configuration** - Easy customization and extension
 
 ### 🚧 **Planned**
+- [ ] **Multi-tag filtering** - Combine multiple tag filters simultaneously
+- [ ] **Custom tag creation** - Runtime tag definition without editing files
 - [ ] **Multi-format support** (PDF, DOCX, EPUB)
 - [ ] **Statistical analysis** (R², correlation coefficients)
-- [ ] **Language detection** and stop-word filtering  
+- [ ] **Language detection** and automatic stop-word selection
 - [ ] **N-gram analysis** (bigrams, trigrams)
 - [ ] **Comparative analysis** between multiple texts
-- [ ] **Export formats** (JSON, XML, LaTeX)
+- [ ] **Export formats** (JSON, XML, LaTeX) with tag information
 - [ ] **Batch processing** for multiple files
+- [ ] **Regex-based tags** - Pattern matching for advanced categorization
 
 ## 📄 License
 
