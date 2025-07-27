@@ -13,6 +13,13 @@ fn main() -> anyhow::Result<()> {
 
     let start_time = Instant::now();
     
+    // Extract file title for display
+    let file_title = std::path::Path::new(&args.file)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Unknown")
+        .to_string();
+    
     let parse_start = Instant::now();
     let words = TextParser::parse_file(&args.file)?;
     let parse_duration = parse_start.elapsed();
@@ -31,7 +38,7 @@ fn main() -> anyhow::Result<()> {
             write_results_to_file(&word_counts, &output_file, &analyzer)?;
         }
     } else {
-        run_tui(word_counts, analyzer.total_words(), analyzer.unique_words(), parse_duration, analyze_duration, total_duration)?;
+        run_tui(word_counts, analyzer.total_words(), analyzer.unique_words(), parse_duration, analyze_duration, total_duration, file_title)?;
     }
 
     Ok(())
@@ -44,6 +51,7 @@ fn run_tui(
     parse_duration: std::time::Duration,
     analyze_duration: std::time::Duration,
     total_duration: std::time::Duration,
+    file_title: String,
 ) -> anyhow::Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -51,7 +59,7 @@ fn run_tui(
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    let mut app = App::new(word_counts, total_words, unique_words, parse_duration, analyze_duration, total_duration);
+    let mut app = App::new(word_counts, total_words, unique_words, parse_duration, analyze_duration, total_duration, file_title);
     let res = app.run(&mut terminal);
 
     disable_raw_mode()?;

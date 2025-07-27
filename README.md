@@ -34,16 +34,30 @@ Zipfr is a high-performance command-line tool for analyzing text according to **
 - **Benchmarking metrics** showing words/second processing speed
 
 ### 🎨 **Interactive TUI (Default)**
-- **Dynamic Zipf distribution chart** that updates as you scroll
-- **Vim-like navigation** (`j/k`, `g/G`, `Ctrl+d/u`, etc.)
-- **Visual cursor** highlighting selected word on chart
-- **Logarithmic scale toggle** (`L`) for better power-law visualization
-- **Dual Zipf line modes** (`Z`):
+- **Dynamic Zipf distribution chart** with perfect list-chart synchronization
+- **Advanced Vim-like navigation** (`j/k`, `g/G`, `Ctrl+u/d/f/b`, `h/l`)
+- **Intelligent search** (`/`) with fuzzy matching and `n/N` navigation
+- **Visual cursor** with color-coded Zipf fit indicators
+- **Log-log scale visualization** (`L`) - proper academic standard for power laws
+- **Dual chart scope modes** (`A`):
+  - **Visible Range**: Detailed analysis of current view
+  - **All Data**: Complete corpus overview from rank 1 to N
+- **Dual Zipf reference lines** (`Z`):
   - **Absolute**: Based on corpus-wide rank 1 frequency
-  - **Relative**: Based on visible range for local analysis
+  - **Relative**: Based on visible/chart range for local analysis
+- **Goodness of fit analysis** with color-coded deviation indicators
 - **Responsive layout** adapting to terminal width
 
-### 📊 **Analysis Options**
+### 📊 **Advanced Analysis Features**
+- **Log-log scale visualization** - Academic standard for power law analysis
+- **Dual-scope analysis**:
+  - **Micro-analysis**: Focus on specific rank ranges
+  - **Macro-analysis**: Complete corpus-wide distribution
+- **Zipf law adherence analysis** with color-coded fit indicators:
+  - 🟢 **Green**: Perfect fit (±10%)
+  - 🟡 **Yellow**: Good fit (±30%)
+  - 🔵 **Blue/Red**: Extreme deviations
+- **Real-time chart synchronization** between list and visualization
 - **Customizable output** (top N words)
 - **CSV export** for further analysis
 - **Clean text parsing** handling punctuation and normalization
@@ -94,17 +108,42 @@ zipfr document.txt --no-interactive --top 10
 curl -s https://www.gutenberg.org/files/11/11-0.txt | zipfr /dev/stdin
 ```
 
+### Advanced Analysis Workflow
+```bash
+# 1. Launch interactive analysis
+zipfr document.txt
+
+# 2. In the TUI:
+#    - Press 'A' to view entire corpus distribution
+#    - Press 'L' to enable log-log scale (academic standard)
+#    - Press 'Z' to add Zipf reference lines
+#    - Use '/' to search for specific words
+#    - Navigate with j/k to examine different rank ranges
+
+# 3. Export results for further analysis
+zipfr document.txt --no-interactive --output analysis.csv
+```
+
 ### Interactive Features
 <div align="center">
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `j/k` `↑/↓` | Navigate | Move through word list |
+| **Navigation** | | |
+| `j/k` `↑/↓` | Move | Line by line navigation |
+| `h/l` | Move | Alternative line navigation |
 | `g` / `G` | Jump | Go to top/bottom |
 | `[num]g` | Goto | Jump to specific rank |
-| `Ctrl+d/u` | Page | Half page up/down |
-| `L` | Log Scale | Toggle logarithmic Y-axis |
-| `Z` | Zipf Mode | Cycle: Off → Absolute → Relative |
+| `Ctrl+u/d` | Page | Half page up/down |
+| `Ctrl+f/b` | Page | Full page up/down |
+| **Search** | | |
+| `/` | Search | Fuzzy search with live results |
+| `n/N` | Navigate | Next/previous search match |
+| **Chart Controls** | | |
+| `L` | Log Scale | Toggle log-log visualization |
+| `A` | Chart Scope | Toggle: Visible Range ↔ All Data |
+| `Z` | Zipf Lines | Cycle: Off → Absolute → Relative |
+| **General** | | |
 | `q` | Quit | Exit application |
 
 </div>
@@ -202,12 +241,21 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 ## 🗺 Roadmap
 
+### ✅ **Completed**
+- [x] **Log-log scale visualization** - Academic standard for power law analysis
+- [x] **Goodness of fit analysis** - Color-coded Zipf law adherence indicators
+- [x] **Dual-scope analysis** - Micro and macro view capabilities
+- [x] **Advanced search** - Fuzzy matching with navigation
+- [x] **Chart-list synchronization** - Perfect spatial alignment
+
+### 🚧 **Planned**
 - [ ] **Multi-format support** (PDF, DOCX, EPUB)
-- [ ] **Statistical analysis** (R², goodness of fit)
+- [ ] **Statistical analysis** (R², correlation coefficients)
 - [ ] **Language detection** and stop-word filtering  
 - [ ] **N-gram analysis** (bigrams, trigrams)
 - [ ] **Comparative analysis** between multiple texts
 - [ ] **Export formats** (JSON, XML, LaTeX)
+- [ ] **Batch processing** for multiple files
 
 ## 📄 License
 
