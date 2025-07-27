@@ -113,14 +113,23 @@ zipfr document.txt --no-interactive
 
 # Quick analysis
 zipfr document.txt --no-interactive --top 10
+
+# Custom dataset name
+zipfr data.txt --name "Customer Feedback Analysis"
+
+# Piped input with meaningful name
+cat document.txt | zipfr /dev/stdin --name "Alice in Wonderland"
 ```
 
 ## 📖 Examples
 
 ### Basic Analysis
 ```bash
-# Analyze Alice in Wonderland
-curl -s https://www.gutenberg.org/files/11/11-0.txt | zipfr /dev/stdin
+# Analyze Alice in Wonderland with proper title
+curl -s https://www.gutenberg.org/files/11/11-0.txt | zipfr /dev/stdin --name "Alice's Adventures in Wonderland"
+
+# Analyze local file with custom name
+zipfr corpus.txt --name "Shakespeare Complete Works"
 ```
 
 ### Advanced Analysis Workflow
@@ -217,6 +226,7 @@ Arguments:
   <FILE>  Path to the text file to analyze
 
 Options:
+  -n, --name <NAME>            Custom name for the dataset (overrides filename)
   -t, --top <TOP>              Display top N words [default: 20]
       --no-interactive         Disable interactive TUI mode (use CLI output)
   -o, --output <OUTPUT>        Output results to file

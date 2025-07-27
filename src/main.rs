@@ -13,12 +13,14 @@ fn main() -> anyhow::Result<()> {
 
     let start_time = Instant::now();
     
-    // Extract file title for display
-    let file_title = std::path::Path::new(&args.file)
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("Unknown")
-        .to_string();
+    // Extract file title for display (use custom name if provided)
+    let file_title = args.name.unwrap_or_else(|| {
+        std::path::Path::new(&args.file)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("Unknown")
+            .to_string()
+    });
     
     let parse_start = Instant::now();
     let words = TextParser::parse_file(&args.file)?;

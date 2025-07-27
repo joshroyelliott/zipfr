@@ -16,4 +16,7 @@ pub struct Args {
 
     #[arg(short, long, help = "Output results to file")]
     pub output: Option<String>,
+
+    #[arg(short = 'n', long = "name", help = "Custom name for the dataset (overrides filename)")]
+    pub name: Option<String>,
 }
