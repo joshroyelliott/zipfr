@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use anyhow::{Result, Context};
 
@@ -18,6 +19,16 @@ pub struct WordCount {
     pub tags: HashSet<Tag>,
 }
 
+#[derive(Debug, Clone)]
+pub struct Dataset {
+    pub name: String,
+    pub word_counts: Vec<WordCount>,
+    pub total_words: usize,
+    pub unique_words: usize,
+    pub parse_duration: Duration,
+    pub analyze_duration: Duration,
+}
+
 #[derive(Debug, Deserialize)]
 struct TagConfig {
     tags: HashMap<String, TagDefinition>,
@@ -31,6 +42,7 @@ struct TagDefinition {
     words: Vec<String>,
 }
 
+#[derive(Clone)]
 pub struct TagMatcher {
     word_to_tags: HashMap<String, HashSet<Tag>>,
     available_tags: Vec<Tag>,
