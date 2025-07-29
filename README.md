@@ -34,8 +34,13 @@ Zipfr is a high-performance command-line tool for analyzing text according to **
 - **Benchmarking metrics** showing words/second processing speed
 
 ### 🎨 **Interactive TUI (Default)**
+- **Multi-dataset comparative analysis** with side-by-side view (up to 4 datasets)
+- **Dual viewing modes**:
+  - **Multi-Dataset View**: Side-by-side comparison of multiple datasets
+  - **Chart Mode**: Single dataset with full visualization capabilities
 - **Dynamic Zipf distribution chart** with perfect list-chart synchronization
 - **Advanced Vim-like navigation** (`j/k`, `g/G`, `Ctrl+u/d/f/b`, `h/l`)
+- **Dataset navigation**: `Tab`/`Shift+Tab` for cycling, `[`/`]` in chart mode
 - **Intelligent search** (`/`) with fuzzy matching and `n/N` navigation
 - **Visual cursor** with color-coded Zipf fit indicators
 - **Log-log scale visualization** (`L`) - proper academic standard for power laws
@@ -46,6 +51,8 @@ Zipfr is a high-performance command-line tool for analyzing text according to **
   - **Absolute**: Based on corpus-wide rank 1 frequency
   - **Relative**: Based on visible/chart range for local analysis
 - **Goodness of fit analysis** with color-coded deviation indicators
+- **Horizontal scrolling** for more than 4 datasets
+- **Active dataset highlighting** with visual indicators
 - **Responsive layout** adapting to terminal width
 
 ### 📊 **Advanced Analysis Features**
@@ -99,8 +106,14 @@ cargo install zipfr
 
 ### Interactive Mode (Default)
 ```bash
-# Launch interactive TUI (default)
+# Single dataset analysis
 zipfr document.txt
+
+# Multi-dataset comparative analysis
+zipfr alice.txt dracula.txt frankenstein.txt
+
+# With custom names
+zipfr file1.txt file2.txt file3.txt --name "Dataset A" --name "Dataset B" --name "Dataset C"
 
 # With options
 zipfr document.txt --top 100 --output analysis.csv
@@ -108,14 +121,15 @@ zipfr document.txt --top 100 --output analysis.csv
 
 ### CLI Mode
 ```bash
-# Traditional output for scripts/automation
+# Single dataset analysis
 zipfr document.txt --no-interactive
 
-# Quick analysis
-zipfr document.txt --no-interactive --top 10
+# Multi-dataset analysis
+zipfr file1.txt file2.txt file3.txt --no-interactive --top 10
 
-# Custom dataset name
+# Custom dataset names
 zipfr data.txt --name "Customer Feedback Analysis"
+zipfr corpus1.txt corpus2.txt --name "19th Century" --name "20th Century"
 
 # Piped input with meaningful name
 cat document.txt | zipfr /dev/stdin --name "Alice in Wonderland"
@@ -125,27 +139,32 @@ cat document.txt | zipfr /dev/stdin --name "Alice in Wonderland"
 
 ### Basic Analysis
 ```bash
-# Analyze Alice in Wonderland with proper title
+# Single dataset analysis
 curl -s https://www.gutenberg.org/files/11/11-0.txt | zipfr /dev/stdin --name "Alice's Adventures in Wonderland"
 
-# Analyze local file with custom name
-zipfr corpus.txt --name "Shakespeare Complete Works"
+# Multi-dataset comparative analysis
+zipfr alice.txt dracula.txt frankenstein.txt --name "Alice" --name "Dracula" --name "Frankenstein"
+
+# Research corpus comparison
+zipfr corpus1.txt corpus2.txt corpus3.txt --name "19th Century" --name "20th Century" --name "Modern"
 ```
 
 ### Advanced Analysis Workflow
 ```bash
-# 1. Launch interactive analysis
-zipfr document.txt
+# 1. Launch multi-dataset comparative analysis
+zipfr alice.txt dracula.txt frankenstein.txt --name "Alice" --name "Dracula" --name "Frankenstein"
 
 # 2. In the TUI:
-#    - Press 'A' to view entire corpus distribution
+#    - View side-by-side comparison (default multi-dataset mode)
+#    - Press 'Tab'/'Shift+Tab' to navigate between datasets
+#    - Press 'C' to toggle to chart mode for detailed analysis
+#    - In chart mode: use '['/']' to switch between datasets
 #    - Press 'L' to enable log-log scale (academic standard)
 #    - Press 'Z' to add Zipf reference lines
-#    - Use '/' to search for specific words
-#    - Navigate with j/k to examine different rank ranges
+#    - Use '/' to search for specific words across datasets
 
 # 3. Export results for further analysis
-zipfr document.txt --no-interactive --output analysis.csv
+zipfr alice.txt dracula.txt frankenstein.txt --no-interactive --output comparison.csv
 ```
 
 ### Tag Filtering Examples
@@ -179,6 +198,10 @@ zipfr document.txt
 | `[num]g` | Goto | Jump to specific rank |
 | `Ctrl+u/d` | Page | Half page up/down |
 | `Ctrl+f/b` | Page | Full page up/down |
+| **Multi-Dataset** | | |
+| `C` | Chart Mode | Toggle: Multi-Dataset ↔ Chart Mode |
+| `Tab` / `Shift+Tab` | Dataset Nav | Cycle through datasets |
+| `[` / `]` | Chart Nav | Navigate datasets in chart mode |
 | **Search** | | |
 | `/` | Search | Fuzzy search with live results |
 | `n/N` | Navigate | Next/previous search match |
@@ -220,13 +243,13 @@ Rank | Word                 |    Count
 ## 📋 Command Line Options
 
 ```
-Usage: zipfr [OPTIONS] <FILE>
+Usage: zipfr [OPTIONS] <FILES>...
 
 Arguments:
-  <FILE>  Path to the text file to analyze
+  <FILES>...  Path(s) to the text file(s) to analyze
 
 Options:
-  -n, --name <NAME>            Custom name for the dataset (overrides filename)
+  -n, --name <NAMES>...        Custom names for datasets (one per file, overrides filenames)
   -t, --top <TOP>              Display top N words [default: 20]
       --no-interactive         Disable interactive TUI mode (use CLI output)
   -o, --output <OUTPUT>        Output results to file
@@ -321,6 +344,9 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 ## 🗺 Roadmap
 
 ### ✅ **Completed**
+- [x] **Multi-dataset comparative analysis** - Side-by-side comparison of up to 4 datasets
+- [x] **Dual viewing modes** - Multi-dataset view and chart mode with seamless switching
+- [x] **Advanced dataset navigation** - Tab/Shift+Tab cycling with horizontal scrolling
 - [x] **Log-log scale visualization** - Academic standard for power law analysis
 - [x] **Goodness of fit analysis** - Color-coded Zipf law adherence indicators
 - [x] **Dual-scope analysis** - Micro and macro view capabilities

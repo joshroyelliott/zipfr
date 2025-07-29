@@ -16,10 +16,69 @@ pub enum ChartScope {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum FilterMode {
-    None,                    // Show all words
-    ExcludeTag(Tag),        // Hide words with this tag
-    IncludeOnlyTag(Tag),    // Show only words with this tag
+pub struct FilterSet {
+    pub exclude_tags: Vec<Tag>,
+    pub include_only_tags: Vec<Tag>,  // OR logic - match ANY of these
+    pub exclude_single: bool,
+}
+
+impl FilterSet {
+    fn new() -> Self {
+        Self {
+            exclude_tags: Vec::new(),
+            include_only_tags: Vec::new(),
+            exclude_single: false,
+        }
+    }
+    
+    fn is_empty(&self) -> bool {
+        self.exclude_tags.is_empty() && self.include_only_tags.is_empty() && !self.exclude_single
+    }
+    
+    fn matches(&self, word_count: &WordCount) -> bool {
+        // 1. Exclude singles check
+        if self.exclude_single && word_count.count == 1 {
+            return false;
+        }
+        
+        // 2. Exclude tags check (exclude if word has ANY excluded tag)
+        if self.exclude_tags.iter().any(|tag| word_count.tags.contains(tag)) {
+            return false;
+        }
+        
+        // 3. Include only tags check (OR logic - include if word has ANY include tag, or if no include filters)
+        if !self.include_only_tags.is_empty() {
+            return self.include_only_tags.iter().any(|tag| word_count.tags.contains(tag));
+        }
+        
+        true
+    }
+    
+    // Conflict prevention methods
+    fn add_exclude_tag(&mut self, tag: Tag) {
+        // Remove from include list if present (prevent conflicts)
+        self.include_only_tags.retain(|t| t != &tag);
+        // Add to exclude list if not already present
+        if !self.exclude_tags.contains(&tag) {
+            self.exclude_tags.push(tag);
+        }
+    }
+    
+    fn add_include_tag(&mut self, tag: Tag) {
+        // Remove from exclude list if present (prevent conflicts)
+        self.exclude_tags.retain(|t| t != &tag);
+        // Add to include list if not already present
+        if !self.include_only_tags.contains(&tag) {
+            self.include_only_tags.push(tag);
+        }
+    }
+    
+    
+    fn clear(&mut self) {
+        self.exclude_tags.clear();
+        self.include_only_tags.clear();
+        self.exclude_single = false;
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -76,7 +135,7 @@ pub struct App {
     pub chart_scope: ChartScope,
     pub normalization_mode: NormalizationMode,
     // Global filter state that applies to all datasets
-    pub filter_mode: FilterMode,
+    pub filter_set: FilterSet,
     pub filter_dirty: bool,
     pub available_tags: Vec<Tag>,
     pub filter_input_state: FilterInputState,
@@ -136,11 +195,13 @@ impl App {
             }
         }
 
+        let chart_mode = datasets.len() == 1; // Default to chart mode for single dataset
+        
         let mut app = Self {
             datasets,
             active_dataset_index: 0,
             visible_dataset_start: 0,
-            chart_mode: false,
+            chart_mode,
             filtered_word_counts: word_counts.clone(),
             word_counts,
             per_dataset_filtered_words,
@@ -159,7 +220,7 @@ impl App {
             zipf_mode: ZipfMode::Off,
             chart_scope: ChartScope::Relative,
             normalization_mode: NormalizationMode::Raw,
-            filter_mode: FilterMode::None,
+            filter_set: FilterSet::new(),
             filter_dirty: false,
             available_tags,
             filter_input_state: FilterInputState::SelectingTag,
@@ -442,7 +503,7 @@ impl App {
                     }
                     KeyCode::Char('c') => {
                         // Clear all filters and exit
-                        self.filter_mode = FilterMode::None;
+                        self.filter_set.clear();
                         self.apply_current_filter_to_all_datasets();
                         self.input_mode = InputMode::Normal;
                     }
@@ -467,13 +528,13 @@ impl App {
                     }
                     KeyCode::Char('e') => {
                         // Exclude this tag
-                        self.filter_mode = FilterMode::ExcludeTag(tag.clone());
+                        self.filter_set.add_exclude_tag(tag.clone());
                         self.apply_current_filter_to_all_datasets();
                         self.input_mode = InputMode::Normal;
                     }
                     KeyCode::Char('i') => {
                         // Include only this tag
-                        self.filter_mode = FilterMode::IncludeOnlyTag(tag.clone());
+                        self.filter_set.add_include_tag(tag.clone());
                         self.apply_current_filter_to_all_datasets();
                         self.input_mode = InputMode::Normal;
                     }
@@ -627,7 +688,7 @@ impl App {
                                 ChartScope::Absolute => ChartScope::Relative,
                             };
                         }
-                        (KeyCode::Char('M'), _) => {
+                        (KeyCode::Char('%'), _) => {
                             self.normalization_mode = match self.normalization_mode {
                                 NormalizationMode::Raw => NormalizationMode::Percentage,
                                 NormalizationMode::Percentage => NormalizationMode::Raw,
@@ -657,6 +718,10 @@ impl App {
                             // Toggle stop word filter
                             self.toggle_stopword_filter();
                         }
+                        (KeyCode::Char('U'), _) => {
+                            // Toggle single words filter
+                            self.toggle_single_words_filter();
+                        }
                         (KeyCode::Char('F'), _) => {
                             // Enter filter mode
                             self.filter_input_state = FilterInputState::SelectingTag;
@@ -675,7 +740,7 @@ impl App {
         footer_height += 1;
         
         // Chart/status line (when any chart mode is active OR filter is active)
-        if self.log_scale || self.zipf_mode != ZipfMode::Off || self.chart_scope != ChartScope::Relative || self.filter_mode != FilterMode::None {
+        if self.log_scale || self.zipf_mode != ZipfMode::Off || self.chart_scope != ChartScope::Relative || !self.filter_set.is_empty() {
             footer_height += 1;
         }
         
@@ -747,23 +812,56 @@ impl App {
         };
         
         let words_per_sec = self.total_words as f64 / self.total_duration.as_secs_f64();
+        
+        // Calculate filtered vs original totals
+        let original_total_words = self.word_counts.iter().map(|wc| wc.count).sum::<usize>();
+        let filtered_total_words = self.filtered_word_counts.iter().map(|wc| wc.count).sum::<usize>();
+        let original_unique_words = self.word_counts.len();
+        let filtered_unique_words = self.filtered_word_counts.len();
+        
+        // Format displays based on filtering state
+        let total_display = if !self.filter_set.is_empty() {
+            let percentage = if original_total_words > 0 {
+                (filtered_total_words as f64 / original_total_words as f64) * 100.0
+            } else {
+                0.0
+            };
+            format!("{}/{} ({:.0}%)", filtered_total_words, original_total_words, percentage)
+        } else {
+            format!("{}", self.total_words)
+        };
+        
+        let unique_display = if !self.filter_set.is_empty() {
+            let percentage = if original_unique_words > 0 {
+                (filtered_unique_words as f64 / original_unique_words as f64) * 100.0
+            } else {
+                0.0
+            };
+            format!("{}/{} ({:.0}%)", filtered_unique_words, original_unique_words, percentage)
+        } else {
+            format!("{}", self.unique_words)
+        };
+        
+        // Build the analysis line with inline filtering display
+        let analysis_line = vec![
+            Span::styled("Zipfian Text Analysis", Style::default().fg(Color::Gray)),
+            Span::raw(" | "),
+            Span::styled(
+                format!("Total Words: {}", total_display),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::raw(" | "),
+            Span::styled(
+                format!("Unique Words: {}", unique_display),
+                Style::default().fg(Color::Green),
+            ),
+        ];
+        
         let header = Paragraph::new(vec![
             Line::from(vec![
                 Span::styled(&title, Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
             ]),
-            Line::from(vec![
-                Span::styled("Zipfian Text Analysis", Style::default().fg(Color::Gray)),
-                Span::raw(" | "),
-                Span::styled(
-                    format!("Total Words: {}", self.total_words),
-                    Style::default().fg(Color::Yellow),
-                ),
-                Span::raw(" | "),
-                Span::styled(
-                    format!("Unique Words: {}", self.unique_words),
-                    Style::default().fg(Color::Green),
-                ),
-            ]),
+            Line::from(analysis_line),
             Line::from(vec![
                 Span::styled("Performance: ", Style::default().fg(Color::Gray)),
                 Span::styled(
@@ -935,20 +1033,13 @@ impl App {
     fn apply_current_filter_to_all_datasets(&mut self) {
         // Apply the current filter to all datasets and cache the results
         for (dataset_index, dataset) in self.datasets.iter().enumerate() {
-            let filtered_words = match &self.filter_mode {
-                FilterMode::None => dataset.word_counts.clone(),
-                FilterMode::ExcludeTag(tag) => {
-                    dataset.word_counts.iter()
-                        .filter(|wc| !wc.tags.contains(tag))
-                        .cloned()
-                        .collect()
-                },
-                FilterMode::IncludeOnlyTag(tag) => {
-                    dataset.word_counts.iter()
-                        .filter(|wc| wc.tags.contains(tag))
-                        .cloned()
-                        .collect()
-                },
+            let filtered_words = if self.filter_set.is_empty() {
+                dataset.word_counts.clone()
+            } else {
+                dataset.word_counts.iter()
+                    .filter(|wc| self.filter_set.matches(wc))
+                    .cloned()
+                    .collect()
             };
 
             // Re-rank the filtered words
@@ -981,16 +1072,18 @@ impl App {
 
     fn toggle_stopword_filter(&mut self) {
         if let Some(stopword_tag) = self.available_tags.iter().find(|tag| tag.name == "Stop Words") {
-            match &self.filter_mode {
-                FilterMode::ExcludeTag(tag) if tag == stopword_tag => {
-                    self.filter_mode = FilterMode::None;
-                },
-                _ => {
-                    self.filter_mode = FilterMode::ExcludeTag(stopword_tag.clone());
-                }
+            if self.filter_set.exclude_tags.contains(stopword_tag) {
+                self.filter_set.exclude_tags.retain(|t| t != stopword_tag);
+            } else {
+                self.filter_set.add_exclude_tag(stopword_tag.clone());
             }
             self.apply_current_filter_to_all_datasets();
         }
+    }
+
+    fn toggle_single_words_filter(&mut self) {
+        self.filter_set.exclude_single = !self.filter_set.exclude_single;
+        self.apply_current_filter_to_all_datasets();
     }
 
     fn render_multi_datasets(&mut self, f: &mut Frame, area: Rect) {
@@ -1154,12 +1247,12 @@ impl App {
     fn render_footer(&self, f: &mut Frame, area: Rect) {
         let navigation_line = if self.datasets.len() > 1 {
             if self.chart_mode {
-                "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Chart: L(log) Z(zipf) A(scope) M(normalize) | Datasets: [/] | Mode: C(multi) | Filter: S(stopwords) F(filter) | /(search) n/N | q(quit)"
+                "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Chart: L(log) Z(zipf) A(scope) %(normalize) | Datasets: [/] | Mode: C(multi) | Filter: S(stopwords) U(single) F(filter) | /(search) n/N | q(quit)"
             } else {
-                "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Datasets: Tab/Shift+Tab | Mode: C(chart) | Display: M(normalize) | Filter: S(stopwords) F(filter) | /(search) n/N | q(quit)"
+                "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Datasets: Tab/Shift+Tab | Mode: C(chart) | Display: %(normalize) | Filter: S(stopwords) U(single) F(filter) | /(search) n/N | q(quit)"
             }
         } else {
-            "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Chart: L(log) Z(zipf) A(scope) M(normalize) | Filter: S(stopwords) F(filter) | /(search) n/N | q(quit)"
+            "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Chart: L(log) Z(zipf) A(scope) %(normalize) | Filter: S(stopwords) U(single) F(filter) | /(search) n/N | q(quit)"
         };
         
         let mut lines = vec![
@@ -1203,20 +1296,34 @@ impl App {
         }
         
         // Add filter status to the same line
-        match &self.filter_mode {
-            FilterMode::None => {},
-            FilterMode::ExcludeTag(tag) => {
-                if !chart_status.is_empty() { chart_status.push(Span::raw(" | ")); }
-                chart_status.push(Span::styled("Filter: ", Style::default().fg(Color::Gray)));
+        if !self.filter_set.is_empty() {
+            if !chart_status.is_empty() { chart_status.push(Span::raw(" | ")); }
+            chart_status.push(Span::styled("Filter: ", Style::default().fg(Color::Gray)));
+            
+            let mut filter_parts = Vec::new();
+            
+            // Add exclude filters
+            if self.filter_set.exclude_single {
+                filter_parts.push("Single Words".to_string());
+            }
+            for tag in &self.filter_set.exclude_tags {
+                filter_parts.push(tag.name.clone());
+            }
+            
+            if !filter_parts.is_empty() {
                 chart_status.push(Span::styled("Excluding ", Style::default().fg(Color::Red)));
-                chart_status.push(Span::styled(&tag.name, Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)));
-            },
-            FilterMode::IncludeOnlyTag(tag) => {
-                if !chart_status.is_empty() { chart_status.push(Span::raw(" | ")); }
-                chart_status.push(Span::styled("Filter: ", Style::default().fg(Color::Gray)));
+                chart_status.push(Span::styled(filter_parts.join(", "), Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)));
+            }
+            
+            // Add include filters
+            if !self.filter_set.include_only_tags.is_empty() {
+                if !filter_parts.is_empty() {
+                    chart_status.push(Span::raw(" | "));
+                }
+                let include_parts: Vec<String> = self.filter_set.include_only_tags.iter().map(|tag| tag.name.clone()).collect();
                 chart_status.push(Span::styled("Only ", Style::default().fg(Color::Green)));
-                chart_status.push(Span::styled(&tag.name, Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)));
-            },
+                chart_status.push(Span::styled(include_parts.join(", "), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)));
+            }
         }
         
         // Show the combined status line if there's anything to show

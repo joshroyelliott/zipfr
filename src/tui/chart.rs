@@ -37,7 +37,7 @@ impl ChartWidget {
         zipf_mode: &ZipfMode,
         chart_scope: &ChartScope,
         selected_index: usize,
-        visible_start: usize,
+        _visible_start: usize,
         selected_fit_ratio: Option<f64>
     ) {
         if visible_words.is_empty() {
@@ -138,9 +138,8 @@ impl ChartWidget {
             .data(&data)];
 
         // Add highlighted point for currently selected word
-        let selected_relative_index = selected_index.saturating_sub(visible_start);
-        let selected_data: Vec<(f64, f64)> = if selected_relative_index < visible_words.len() {
-            let selected_word = &visible_words[selected_relative_index];
+        let selected_data: Vec<(f64, f64)> = if selected_index < all_words.len() {
+            let selected_word = &all_words[selected_index];
             let rank = selected_word.rank as f64;
             let freq = selected_word.count as f64;
             
@@ -169,8 +168,8 @@ impl ChartWidget {
         }
 
         // Add selected word marker LAST so it renders on top of everything
-        if !selected_data.is_empty() && selected_relative_index < visible_words.len() {
-            let selected_word = &visible_words[selected_relative_index];
+        if !selected_data.is_empty() && selected_index < all_words.len() {
+            let selected_word = &all_words[selected_index];
             
             // Choose cursor color based on Zipf fit ratio if available
             let cursor_color = if let Some(fit_ratio) = selected_fit_ratio {
