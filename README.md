@@ -27,7 +27,7 @@ Zipfr is a high-performance command-line tool for analyzing text according to **
 
 <div align="center">
   <img src="images/zipfr_screenshot_cmp.png" alt="TUI comparison screenshot">
-<div>
+</div>
 
 ## ✨ Features
 
