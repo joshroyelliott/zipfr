@@ -22,8 +22,12 @@ Zipfr is a high-performance command-line tool for analyzing text according to **
 
 
 <div align="center">
-  <img src="images/zipfr_screenshot.png" alt="TUI screenshot">
+  <img src="images/zipfr_screenshot_chrt.png" alt="TUI chart screenshot">
 </div>
+
+<div align="center">
+  <img src="images/zipfr_screenshot_cmp.png" alt="TUI comparison screenshot">
+<div>
 
 ## ✨ Features
 
@@ -355,9 +359,9 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - [x] **Intelligent tagging system** - 6 built-in tag categories with visual indicators
 - [x] **Two-step filtering interface** - Intuitive exclude/include workflow
 - [x] **TOML-based tag configuration** - Easy customization and extension
+- [X] **Multi-tag filtering** - Combine multiple tag filters simultaneously
 
 ### 🚧 **Planned**
-- [ ] **Multi-tag filtering** - Combine multiple tag filters simultaneously
 - [ ] **Custom tag creation** - Runtime tag definition without editing files
 - [ ] **Multi-format support** (PDF, DOCX, EPUB)
 - [ ] **Statistical analysis** (R², correlation coefficients)
@@ -365,7 +369,6 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - [ ] **N-gram analysis** (bigrams, trigrams)
 - [ ] **Comparative analysis** between multiple texts
 - [ ] **Export formats** (JSON, XML, LaTeX) with tag information
-- [ ] **Batch processing** for multiple files
 - [ ] **Regex-based tags** - Pattern matching for advanced categorization
 
 ## 📄 License
