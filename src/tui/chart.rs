@@ -1,5 +1,5 @@
 use crate::analyzer::WordCount;
-use crate::tui::app::{ZipfMode, ChartScope};
+use crate::tui::app::{ZipfState, ZipfBasis, ZipfReference, ChartScope};
 use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
@@ -25,16 +25,17 @@ impl ChartWidget {
     }
     pub fn render(f: &mut Frame, area: Rect, word_counts: &[WordCount], max_items: usize) {
         let visible_words = &word_counts[..max_items.min(word_counts.len())];
-        Self::render_enhanced(f, area, visible_words, word_counts, false, &ZipfMode::Off, &ChartScope::Relative, 0, 0, None);
+        Self::render_enhanced(f, area, visible_words, word_counts, word_counts, false, &ZipfState::new(), &ChartScope::Relative, 0, 0, None);
     }
 
     pub fn render_enhanced(
         f: &mut Frame, 
         area: Rect, 
         visible_words: &[WordCount],
-        all_words: &[WordCount], 
+        filtered_words: &[WordCount],
+        original_words: &[WordCount], 
         log_scale: bool, 
-        zipf_mode: &ZipfMode,
+        zipf_state: &ZipfState,
         chart_scope: &ChartScope,
         selected_index: usize,
         _visible_start: usize,
@@ -44,10 +45,10 @@ impl ChartWidget {
             return;
         }
 
-        // Choose data source based on chart scope
+        // Choose data source based on chart scope (always use filtered data for plotting)
         let chart_words = match chart_scope {
             ChartScope::Relative => visible_words,
-            ChartScope::Absolute => all_words,
+            ChartScope::Absolute => filtered_words,
         };
 
         // Prepare actual data
@@ -68,65 +69,102 @@ impl ChartWidget {
             })
             .collect();
 
-        // Prepare Zipf data based on mode
-        let zipf_data: Vec<(f64, f64)> = match zipf_mode {
-            ZipfMode::Off => Vec::new(),
-            ZipfMode::Absolute => {
-                // Use global rank 1 word as reference
-                if let Some(global_first) = all_words.first() {
-                    let global_first_freq = global_first.count as f64;
-                    chart_words
-                        .iter()
-                        .map(|wc| {
-                            let rank = wc.rank as f64;
-                            let ideal_freq = global_first_freq / rank;
-                            
-                            let x = if log_scale {
-                                rank.ln().max(0.1) // log(rank)
-                            } else {
-                                rank
-                            };
-                            let y = if log_scale { 
-                                ideal_freq.ln().max(0.1) // log(ideal_freq)
-                            } else { 
-                                ideal_freq 
-                            };
-                            (x, y)
-                        })
-                        .collect()
-                } else {
-                    Vec::new()
-                }
-            },
-            ZipfMode::Relative => {
-                // Use first word in chart scope as reference
-                if let Some(chart_first) = chart_words.first() {
-                    let chart_first_freq = chart_first.count as f64;
-                    let chart_first_rank = chart_first.rank as f64;
-                    let constant = chart_first_freq * chart_first_rank;
-                    
-                    chart_words
-                        .iter()
-                        .map(|wc| {
-                            let rank = wc.rank as f64;
-                            let ideal_freq = constant / rank;
-                            
-                            let x = if log_scale {
-                                rank.ln().max(0.1) // log(rank)
-                            } else {
-                                rank
-                            };
-                            let y = if log_scale { 
-                                ideal_freq.ln().max(0.1) // log(ideal_freq)
-                            } else { 
-                                ideal_freq 
-                            };
-                            (x, y)
-                        })
-                        .collect()
-                } else {
-                    Vec::new()
-                }
+        // Prepare Zipf data based on state
+        let zipf_data: Vec<(f64, f64)> = if !zipf_state.enabled {
+            Vec::new()
+        } else {
+            // Choose reference dataset based on basis
+            let reference_words = match zipf_state.basis {
+                ZipfBasis::Filtered => filtered_words,
+                ZipfBasis::Unfiltered => original_words,
+            };
+            
+            // Calculate Zipf line based on reference type and scope
+            match (&zipf_state.reference, chart_scope) {
+                (ZipfReference::Absolute, _) => {
+                    // Absolute reference: use reference dataset's first word as global reference
+                    if let Some(global_first) = reference_words.first() {
+                        let global_first_freq = global_first.count as f64;
+                        chart_words
+                            .iter()
+                            .map(|wc| {
+                                let rank = wc.rank as f64;
+                                let ideal_freq = global_first_freq / rank;
+                                
+                                let x = if log_scale {
+                                    rank.ln().max(0.1) // log(rank)
+                                } else {
+                                    rank
+                                };
+                                let y = if log_scale { 
+                                    ideal_freq.ln().max(0.1) // log(ideal_freq)
+                                } else { 
+                                    ideal_freq 
+                                };
+                                (x, y)
+                            })
+                            .collect()
+                    } else {
+                        Vec::new()
+                    }
+                },
+                (ZipfReference::Relative, ChartScope::Relative) => {
+                    // Relative reference in VISIBLE scope: use visible range with relative constant
+                    if let Some(visible_first) = visible_words.first() {
+                        let visible_first_freq = visible_first.count as f64;
+                        let visible_first_rank = visible_first.rank as f64;
+                        let constant = visible_first_freq * visible_first_rank;
+                        
+                        chart_words
+                            .iter()
+                            .map(|wc| {
+                                let rank = wc.rank as f64;
+                                let ideal_freq = constant / rank;
+                                
+                                let x = if log_scale {
+                                    rank.ln().max(0.1) // log(rank)
+                                } else {
+                                    rank
+                                };
+                                let y = if log_scale { 
+                                    ideal_freq.ln().max(0.1) // log(ideal_freq)
+                                } else { 
+                                    ideal_freq 
+                                };
+                                (x, y)
+                            })
+                            .collect()
+                    } else {
+                        Vec::new()
+                    }
+                },
+                (ZipfReference::Relative, ChartScope::Absolute) => {
+                    // This shouldn't happen in ALL-DATA scope, fall back to absolute
+                    if let Some(global_first) = reference_words.first() {
+                        let global_first_freq = global_first.count as f64;
+                        chart_words
+                            .iter()
+                            .map(|wc| {
+                                let rank = wc.rank as f64;
+                                let ideal_freq = global_first_freq / rank;
+                                
+                                let x = if log_scale {
+                                    rank.ln().max(0.1) // log(rank)
+                                } else {
+                                    rank
+                                };
+                                let y = if log_scale { 
+                                    ideal_freq.ln().max(0.1) // log(ideal_freq)
+                                } else { 
+                                    ideal_freq 
+                                };
+                                (x, y)
+                            })
+                            .collect()
+                    } else {
+                        Vec::new()
+                    }
+                },
             }
         };
 
@@ -138,8 +176,8 @@ impl ChartWidget {
             .data(&data)];
 
         // Add highlighted point for currently selected word
-        let selected_data: Vec<(f64, f64)> = if selected_index < all_words.len() {
-            let selected_word = &all_words[selected_index];
+        let selected_data: Vec<(f64, f64)> = if selected_index < filtered_words.len() {
+            let selected_word = &filtered_words[selected_index];
             let rank = selected_word.rank as f64;
             let freq = selected_word.count as f64;
             
@@ -153,10 +191,11 @@ impl ChartWidget {
 
         // Add idealized Zipf line if enabled (before selected word so it renders underneath)
         if !zipf_data.is_empty() {
-            let zipf_name = match zipf_mode {
-                ZipfMode::Absolute => "Absolute Zipf",
-                ZipfMode::Relative => "Relative Zipf", 
-                ZipfMode::Off => "Zipf", // Shouldn't happen
+            let zipf_name = match (&zipf_state.basis, &zipf_state.reference) {
+                (ZipfBasis::Filtered, ZipfReference::Absolute) => "Filtered Zipf",
+                (ZipfBasis::Filtered, ZipfReference::Relative) => "Filtered Relative Zipf",
+                (ZipfBasis::Unfiltered, ZipfReference::Absolute) => "Unfiltered Zipf",
+                (ZipfBasis::Unfiltered, ZipfReference::Relative) => "Unfiltered Relative Zipf",
             };
             
             datasets.push(Dataset::default()
@@ -168,8 +207,8 @@ impl ChartWidget {
         }
 
         // Add selected word marker LAST so it renders on top of everything
-        if !selected_data.is_empty() && selected_index < all_words.len() {
-            let selected_word = &all_words[selected_index];
+        if !selected_data.is_empty() && selected_index < filtered_words.len() {
+            let selected_word = &filtered_words[selected_index];
             
             // Choose cursor color based on Zipf fit ratio if available
             let cursor_color = if let Some(fit_ratio) = selected_fit_ratio {
@@ -213,10 +252,14 @@ impl ChartWidget {
             ChartScope::Absolute => title.push_str(" [All Data]"),
             ChartScope::Relative => title.push_str(" [Visible Range]"),
         }
-        match zipf_mode {
-            ZipfMode::Absolute => title.push_str(" + Absolute"),
-            ZipfMode::Relative => title.push_str(" + Relative"),
-            ZipfMode::Off => {},
+        if zipf_state.enabled {
+            let suffix = match (&zipf_state.basis, &zipf_state.reference) {
+                (ZipfBasis::Filtered, ZipfReference::Absolute) => " + Filtered",
+                (ZipfBasis::Filtered, ZipfReference::Relative) => " + Filtered Relative",
+                (ZipfBasis::Unfiltered, ZipfReference::Absolute) => " + Unfiltered",
+                (ZipfBasis::Unfiltered, ZipfReference::Relative) => " + Unfiltered Relative",
+            };
+            title.push_str(suffix);
         }
 
         let chart = Chart::new(datasets)

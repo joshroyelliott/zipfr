@@ -51,41 +51,58 @@ Zipfr is a high-performance command-line tool for analyzing text according to **
 - **Dual chart scope modes** (`A`):
   - **Visible Range**: Detailed analysis of current view
   - **All Data**: Complete corpus overview from rank 1 to N
-- **Dual Zipf reference lines** (`Z`):
-  - **Absolute**: Based on corpus-wide rank 1 frequency
-  - **Relative**: Based on visible/chart range for local analysis
+- **Context-aware Zipf analysis** (`Z`):
+  - **VISIBLE scope**: Absolute vs Relative reference lines for micro-analysis
+  - **ALL-DATA scope**: Filtered vs Unfiltered basis for macro-analysis
 - **Goodness of fit analysis** with color-coded deviation indicators
 - **Horizontal scrolling** for more than 4 datasets
 - **Active dataset highlighting** with visual indicators
 - **Responsive layout** adapting to terminal width
+- **Percentage normalization** (`%`): Toggle between raw counts and percentage display
+- **Intelligent filtering feedback**: Real-time display of filtering impact:
+  - **Inline display**: `Total Words: 63456/123456 (51%) | Unique Words: 950/1000 (95%)`
+  - **Contextual information**: Shows both total word and unique word filtering effects
 
 ### 📊 **Advanced Analysis Features**
 - **Log-log scale visualization** - Academic standard for power law analysis
+- **Context-aware Zipf analysis** with intelligent mode switching:
+  - **VISIBLE scope**: Absolute vs Relative reference lines for detailed range analysis
+  - **ALL-DATA scope**: Filtered vs Unfiltered basis for comprehensive corpus analysis
 - **Dual-scope analysis**:
-  - **Micro-analysis**: Focus on specific rank ranges
-  - **Macro-analysis**: Complete corpus-wide distribution
+  - **Micro-analysis**: Focus on specific rank ranges with visible scope
+  - **Macro-analysis**: Complete corpus-wide distribution with all-data scope
 - **Zipf law adherence analysis** with color-coded fit indicators:
   - 🟢 **Green**: Perfect fit (±10%)
   - 🟡 **Yellow**: Good fit (±30%)
   - 🔵 **Blue/Red**: Extreme deviations
 - **Real-time chart synchronization** between list and visualization
+- **Persistent cursor tracking** - chart cursor remains visible even when scrolling outside initial range
 - **Customizable output** (top N words)
 - **CSV export** for further analysis
 - **Clean text parsing** handling punctuation and normalization
 - **Real-time performance metrics**
 
-### 🏷️ **Intelligent Tagging & Filtering System**
+### 🏷️ **Advanced Multi-Filter System**
 - **Comprehensive word tagging** with 6 built-in categories:
   - **Stop Words**: Common function words (the, and, of, etc.)
   - **Sentiment**: Positive and negative emotional words
   - **Academic**: Scholarly and technical terminology
   - **Temporal**: Time-related words (now, then, during, etc.)
   - **Quantitative**: Numbers and measurement words
+- **Multi-filter support**: Combine multiple filters simultaneously
+  - **Additive filtering**: Build complex filter combinations
+  - **Conflict prevention**: Automatic resolution of contradictory filters
+  - **Global application**: Consistent filtering across all datasets
+- **Quick filter toggles**:
+  - **Stop words** (`S`): Instant common word exclusion
+  - **Single-occurrence words** (`U`): Hide/show words appearing only once
+- **Cross-dataset filtering** (`X`): Multi-dataset comparative analysis
+  - **Common words**: Show only words that appear in ALL datasets
+  - **Unique words**: Show only words unique to each dataset
+  - **Efficient computation**: O(1) lookups with cached word sets
+- **Advanced filter interface** (`F`): Two-step tag-based filtering
+- **Real-time filter feedback**: Header shows filtering impact on both total and unique word counts
 - **Visual tag indicators** showing `[S,P,A]` letters with color coding
-- **Intuitive two-step filtering**:
-  - **Step 1**: Select tag category (`F` → number)
-  - **Step 2**: Choose exclude (hide) or include (show only)
-- **Quick stop word toggle** (`S`) for instant common word filtering
 - **TOML-based configuration** for easy tag customization
 - **Zero performance impact** - tags applied once during analysis
 
@@ -164,7 +181,10 @@ zipfr alice.txt dracula.txt frankenstein.txt --name "Alice" --name "Dracula" --n
 #    - Press 'C' to toggle to chart mode for detailed analysis
 #    - In chart mode: use '['/']' to switch between datasets
 #    - Press 'L' to enable log-log scale (academic standard)
-#    - Press 'Z' to add Zipf reference lines
+#    - Press 'A' to toggle between VISIBLE and ALL-DATA scope
+#    - Press 'Z' to cycle through context-aware Zipf reference lines
+#    - Press '%' to toggle between raw counts and percentage display
+#    - Press 'S' to exclude stopwords, 'U' to exclude single-occurrence words
 #    - Use '/' to search for specific words across datasets
 
 # 3. Export results for further analysis
@@ -188,6 +208,11 @@ zipfr document.txt
 # 4. Analyze temporal language patterns
 zipfr document.txt
 # In TUI: Press 'F' → '5' → 'i' to show only temporal words
+
+# 5. Multi-filter analysis: exclude stopwords AND single-occurrence words
+zipfr document.txt
+# In TUI: Press 'S' (exclude stopwords), then 'U' (exclude singles)
+# Header shows: Total Words: 45000/100000 (45%) | Unique Words: 800/2000 (40%)
 ```
 
 ### Interactive Features
@@ -212,17 +237,23 @@ zipfr document.txt
 | **Chart Controls** | | |
 | `L` | Log Scale | Toggle log-log visualization |
 | `A` | Chart Scope | Toggle: Visible Range ↔ All Data |
-| `Z` | Zipf Lines | Cycle: Off → Absolute → Relative |
+| `Z` | Zipf Toggle | Toggle Zipf reference lines on/off |
+| `z` | Zipf Mode | Context-aware: VISIBLE(Abs→Rel) / ALL-DATA(Filt→Unfilt) |
+| `%` | Normalize | Toggle: Raw counts ↔ Percentage display |
 | **Filtering** | | |
 | `F` | Filter Menu | Two-step tag filtering interface |
 | `S` | Stop Words | Quick toggle stop word filter |
-| `c` | Clear | Clear all active filters |
+| `U` | Single Words | Toggle exclusion of single-occurrence words |
+| `X` | Cross-Dataset | Cycle: Off → Common Words → Unique Words (multi-dataset only) |
+| `c` | Clear | Clear all active filters (in filter menu) |
 | **General** | | |
 | `q` | Quit | Exit application |
 
 </div>
 
 ### Sample Output
+
+#### CLI Mode Output
 ```
 Zipfian Text Analysis Results
 ============================
@@ -243,6 +274,13 @@ Rank | Word                 |    Count
    4 | a                    |      632
    5 | she                  |      537
 ```
+
+#### TUI Mode Features
+- **Single dataset**: Automatically opens in chart view with visualization
+- **Multiple datasets**: Opens in comparison view, press `C` to switch to chart mode
+- **Real-time filtering feedback**: `Total Words: 15000/26476 (57%) | Unique Words: 1200/2763 (43%)`
+- **Context-aware Zipf analysis**: Z key behavior adapts to current chart scope (VISIBLE vs ALL-DATA)
+- **Multi-filter combinations**: Apply multiple filters simultaneously with automatic conflict resolution
 
 ## 📋 Command Line Options
 
@@ -359,7 +397,13 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - [x] **Intelligent tagging system** - 6 built-in tag categories with visual indicators
 - [x] **Two-step filtering interface** - Intuitive exclude/include workflow
 - [x] **TOML-based tag configuration** - Easy customization and extension
-- [X] **Multi-tag filtering** - Combine multiple tag filters simultaneously
+- [x] **Multi-filter system** - Combine multiple tag filters simultaneously with conflict prevention
+- [x] **Context-aware Zipf analysis** - Intelligent mode switching based on chart scope
+- [x] **Percentage normalization** - Toggle between raw counts and percentage display
+- [x] **Real-time filtering feedback** - Inline display of filtering impact on total and unique words
+- [x] **Single-occurrence word filtering** - Quick toggle to exclude/include words appearing once
+- [x] **Enhanced cursor tracking** - Chart cursor remains visible when scrolling outside initial range
+- [x] **Smart default behaviors** - Single datasets default to chart view, intelligent Zipf basis selection
 
 ### 🚧 **Planned**
 - [ ] **Custom tag creation** - Runtime tag definition without editing files

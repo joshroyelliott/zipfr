@@ -1,12 +1,37 @@
 use crate::analyzer::{WordCount, Tag, Dataset};
 use crate::tui::ChartWidget;
 use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum ZipfMode {
-    Off,
-    Absolute,  // Based on global rank 1
-    Relative,  // Based on visible range
+pub struct ZipfState {
+    pub enabled: bool,
+    pub basis: ZipfBasis,      // Filtered vs Unfiltered (persistent across scope changes)
+    pub reference: ZipfReference, // Absolute vs Relative (scope-dependent)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ZipfBasis {
+    Filtered,    // Use filtered dataset
+    Unfiltered,  // Use original dataset
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ZipfReference {
+    Absolute,    // Global reference point
+    Relative,    // Local/visible reference point
+}
+
+impl ZipfState {
+    pub fn new() -> Self {
+        Self {
+            enabled: false,
+            basis: ZipfBasis::Unfiltered, // Default to unfiltered
+            reference: ZipfReference::Absolute, // Default to absolute
+        }
+    }
+    
+
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,10 +41,18 @@ pub enum ChartScope {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum CrossDatasetFilter {
+    None,        // No cross-dataset filtering
+    CommonOnly,  // Show only words that appear in ALL datasets
+    UniqueOnly,  // Show only words unique to each dataset
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct FilterSet {
     pub exclude_tags: Vec<Tag>,
     pub include_only_tags: Vec<Tag>,  // OR logic - match ANY of these
     pub exclude_single: bool,
+    pub cross_dataset: CrossDatasetFilter,
 }
 
 impl FilterSet {
@@ -28,11 +61,15 @@ impl FilterSet {
             exclude_tags: Vec::new(),
             include_only_tags: Vec::new(),
             exclude_single: false,
+            cross_dataset: CrossDatasetFilter::None,
         }
     }
     
     fn is_empty(&self) -> bool {
-        self.exclude_tags.is_empty() && self.include_only_tags.is_empty() && !self.exclude_single
+        self.exclude_tags.is_empty() && 
+        self.include_only_tags.is_empty() && 
+        !self.exclude_single &&
+        matches!(self.cross_dataset, CrossDatasetFilter::None)
     }
     
     fn matches(&self, word_count: &WordCount) -> bool {
@@ -50,6 +87,9 @@ impl FilterSet {
         if !self.include_only_tags.is_empty() {
             return self.include_only_tags.iter().any(|tag| word_count.tags.contains(tag));
         }
+        
+        // Note: Cross-dataset filtering is handled separately in apply_current_filter_to_all_datasets
+        // because it requires knowledge of which dataset we're filtering
         
         true
     }
@@ -131,7 +171,7 @@ pub struct App {
     pub number_input: String,
     pub list_state: ListState, // Active dataset's list state (reference to per_dataset_list_states)
     pub log_scale: bool,
-    pub zipf_mode: ZipfMode,
+    pub zipf_state: ZipfState,
     pub chart_scope: ChartScope,
     pub normalization_mode: NormalizationMode,
     // Global filter state that applies to all datasets
@@ -144,6 +184,10 @@ pub struct App {
     pub search_query: String,
     pub search_results: Vec<usize>,
     pub current_search_index: usize,
+    // Cross-dataset word sets for efficient filtering
+    pub common_words: HashSet<String>,      // Words that appear in ALL datasets
+    pub unique_words_per_dataset: Vec<HashSet<String>>, // Words unique to each dataset
+    pub cross_dataset_cache_dirty: bool,
 }
 
 impl App {
@@ -217,7 +261,7 @@ impl App {
             number_input: String::new(),
             list_state,
             log_scale: false,
-            zipf_mode: ZipfMode::Off,
+            zipf_state: ZipfState::new(),
             chart_scope: ChartScope::Relative,
             normalization_mode: NormalizationMode::Raw,
             filter_set: FilterSet::new(),
@@ -228,6 +272,9 @@ impl App {
             search_query: String::new(),
             search_results: Vec::new(),
             current_search_index: 0,
+            common_words: HashSet::new(),
+            unique_words_per_dataset: Vec::new(),
+            cross_dataset_cache_dirty: true,
         };
         
         // Initialize all datasets with no filter (synchronized state)
@@ -378,11 +425,21 @@ impl App {
     }
 
     fn calculate_zipf_fit(&self, word_count: &WordCount, visible_words: &[WordCount]) -> Option<f64> {
-        match self.zipf_mode {
-            ZipfMode::Off => None,
-            ZipfMode::Absolute => {
-                // Compare to global Zipf: ideal_freq = first_word_freq / rank
-                if let Some(global_first) = self.word_counts.first() {
+        if !self.zipf_state.enabled {
+            return None;
+        }
+        
+        // Choose reference dataset based on basis
+        let reference_words = match self.zipf_state.basis {
+            ZipfBasis::Filtered => &self.filtered_word_counts,
+            ZipfBasis::Unfiltered => &self.word_counts,
+        };
+        
+        // Calculate fit based on reference type
+        match &self.zipf_state.reference {
+            ZipfReference::Absolute => {
+                // Compare to global Zipf from reference dataset
+                if let Some(global_first) = reference_words.first() {
                     let global_first_freq = global_first.count as f64;
                     let ideal_freq = global_first_freq / word_count.rank as f64;
                     let actual_freq = word_count.count as f64;
@@ -391,7 +448,7 @@ impl App {
                     None
                 }
             },
-            ZipfMode::Relative => {
+            ZipfReference::Relative => {
                 // Compare to relative Zipf within visible range
                 if let Some(visible_first) = visible_words.first() {
                     let visible_first_freq = visible_first.count as f64;
@@ -417,6 +474,68 @@ impl App {
             r if r < 0.5 => Color::Blue,                     // Extreme underperforming
             r if r > 2.0 => Color::Red,                      // Extreme overperforming
             _ => Color::Gray,                                // Fallback
+        }
+    }
+
+    // Cross-dataset word set computation methods
+    fn compute_cross_dataset_word_sets(&mut self) {
+        if !self.cross_dataset_cache_dirty {
+            return; // Cache is still valid
+        }
+
+        // Only compute if we have multiple datasets
+        if self.datasets.len() <= 1 {
+            self.common_words.clear();
+            self.unique_words_per_dataset.clear();
+            self.cross_dataset_cache_dirty = false;
+            return;
+        }
+
+        // Collect word sets for each dataset
+        let mut dataset_word_sets: Vec<HashSet<String>> = Vec::new();
+        for dataset in &self.datasets {
+            let word_set: HashSet<String> = dataset.word_counts
+                .iter()
+                .map(|wc| wc.word.clone())
+                .collect();
+            dataset_word_sets.push(word_set);
+        }
+
+        // Compute common words (intersection of all datasets)
+        self.common_words = dataset_word_sets[0].clone();
+        for word_set in &dataset_word_sets[1..] {
+            self.common_words = self.common_words.intersection(word_set).cloned().collect();
+        }
+
+        // Compute unique words for each dataset
+        self.unique_words_per_dataset.clear();
+        for (i, dataset_words) in dataset_word_sets.iter().enumerate() {
+            let mut unique_words = dataset_words.clone();
+            
+            // Remove words that appear in any other dataset
+            for (j, other_words) in dataset_word_sets.iter().enumerate() {
+                if i != j {
+                    unique_words = unique_words.difference(other_words).cloned().collect();
+                }
+            }
+            
+            self.unique_words_per_dataset.push(unique_words);
+        }
+
+        self.cross_dataset_cache_dirty = false;
+    }
+
+    fn should_include_word_cross_dataset(&self, word: &str, dataset_index: usize) -> bool {
+        match &self.filter_set.cross_dataset {
+            CrossDatasetFilter::None => true,
+            CrossDatasetFilter::CommonOnly => self.common_words.contains(word),
+            CrossDatasetFilter::UniqueOnly => {
+                if dataset_index < self.unique_words_per_dataset.len() {
+                    self.unique_words_per_dataset[dataset_index].contains(word)
+                } else {
+                    false
+                }
+            }
         }
     }
 
@@ -676,11 +795,47 @@ impl App {
                             self.log_scale = !self.log_scale;
                         }
                         (KeyCode::Char('Z'), _) => {
-                            self.zipf_mode = match self.zipf_mode {
-                                ZipfMode::Off => ZipfMode::Absolute,
-                                ZipfMode::Absolute => ZipfMode::Relative,
-                                ZipfMode::Relative => ZipfMode::Off,
-                            };
+                            // Z: Toggle Zipf line on/off
+                            self.zipf_state.enabled = !self.zipf_state.enabled;
+                            
+                            // If turning on, set smart defaults
+                            if self.zipf_state.enabled {
+                                if self.filter_set.is_empty() {
+                                    self.zipf_state.basis = ZipfBasis::Unfiltered;
+                                } else {
+                                    self.zipf_state.basis = ZipfBasis::Filtered;
+                                }
+                                self.zipf_state.reference = ZipfReference::Absolute;
+                            }
+                        }
+                        (KeyCode::Char('z'), _) => {
+                            // z: Cycle through Zipf modes (only when enabled)
+                            if self.zipf_state.enabled {
+                                match self.chart_scope {
+                                    ChartScope::Relative => {
+                                        // VISIBLE scope: cycle through Absolute/Relative (preserving basis)
+                                        match self.zipf_state.reference {
+                                            ZipfReference::Absolute => {
+                                                self.zipf_state.reference = ZipfReference::Relative;
+                                            },
+                                            ZipfReference::Relative => {
+                                                self.zipf_state.reference = ZipfReference::Absolute;
+                                            },
+                                        }
+                                    },
+                                    ChartScope::Absolute => {
+                                        // ALL-DATA scope: cycle through basis (always absolute reference)
+                                        match self.zipf_state.basis {
+                                            ZipfBasis::Filtered => {
+                                                self.zipf_state.basis = ZipfBasis::Unfiltered;
+                                            },
+                                            ZipfBasis::Unfiltered => {
+                                                self.zipf_state.basis = ZipfBasis::Filtered;
+                                            },
+                                        }
+                                    },
+                                };
+                            }
                         }
                         (KeyCode::Char('A'), _) => {
                             self.chart_scope = match self.chart_scope {
@@ -727,6 +882,10 @@ impl App {
                             self.filter_input_state = FilterInputState::SelectingTag;
                             self.input_mode = InputMode::Filter;
                         }
+                        (KeyCode::Char('X'), _) => {
+                            // Toggle cross-dataset filter (only available with multiple datasets)
+                            self.toggle_cross_dataset_filter();
+                        }
 
                         _ => {}
         }
@@ -740,7 +899,7 @@ impl App {
         footer_height += 1;
         
         // Chart/status line (when any chart mode is active OR filter is active)
-        if self.log_scale || self.zipf_mode != ZipfMode::Off || self.chart_scope != ChartScope::Relative || !self.filter_set.is_empty() {
+        if self.log_scale || self.zipf_state.enabled || self.chart_scope != ChartScope::Relative || !self.filter_set.is_empty() {
             footer_height += 1;
         }
         
@@ -893,7 +1052,7 @@ impl App {
         words: &[WordCount],
         search_results: &[usize],
         visible_words: &[WordCount],
-        zipf_mode: &ZipfMode,
+        zipf_state: &ZipfState,
         normalization_mode: &NormalizationMode,
         total_words: usize,
         calculate_zipf_fit: impl Fn(&WordCount, &[WordCount]) -> Option<f64>,
@@ -932,7 +1091,7 @@ impl App {
                 ];
 
                 // Add fit column if Zipf mode is active
-                if *zipf_mode != ZipfMode::Off {
+                if zipf_state.enabled {
                     if let Some(fit_ratio) = calculate_zipf_fit(word_count, visible_words) {
                         let fit_color = Self::deviation_to_color(fit_ratio);
                         let fit_display = if fit_ratio >= 10.0 {
@@ -998,24 +1157,25 @@ impl App {
         // Create local copies to avoid borrow checker issues
         let filtered_word_counts = self.filtered_word_counts.clone();
         let search_results = self.search_results.clone();
-        let zipf_mode = self.zipf_mode.clone();
+        let zipf_state = self.zipf_state.clone();
         
         let items = Self::format_word_list_items(
             &filtered_word_counts,
             &search_results,
             visible_words,
-            &zipf_mode,
+            &zipf_state,
             &self.normalization_mode,
             self.total_words,
             |word_count, visible_words| self.calculate_zipf_fit(word_count, visible_words),
         );
 
         // Create title with fit column indicator
-        let title = if zipf_mode != ZipfMode::Off {
-            match zipf_mode {
-                ZipfMode::Absolute => "Word Frequencies (Absolute Fit)",
-                ZipfMode::Relative => "Word Frequencies (Relative Fit)",
-                ZipfMode::Off => "Word Frequencies", // Won't reach here
+        let title = if self.zipf_state.enabled {
+            match (&self.zipf_state.basis, &self.zipf_state.reference) {
+                (ZipfBasis::Filtered, ZipfReference::Absolute) => "Word Frequencies (Filtered Fit)",
+                (ZipfBasis::Filtered, ZipfReference::Relative) => "Word Frequencies (Filtered Relative Fit)",
+                (ZipfBasis::Unfiltered, ZipfReference::Absolute) => "Word Frequencies (Unfiltered Fit)",
+                (ZipfBasis::Unfiltered, ZipfReference::Relative) => "Word Frequencies (Unfiltered Relative Fit)",
             }
         } else {
             "Word Frequencies"
@@ -1031,13 +1191,21 @@ impl App {
 
 
     fn apply_current_filter_to_all_datasets(&mut self) {
+        // Compute cross-dataset word sets if needed
+        self.compute_cross_dataset_word_sets();
+        
         // Apply the current filter to all datasets and cache the results
         for (dataset_index, dataset) in self.datasets.iter().enumerate() {
             let filtered_words = if self.filter_set.is_empty() {
                 dataset.word_counts.clone()
             } else {
                 dataset.word_counts.iter()
-                    .filter(|wc| self.filter_set.matches(wc))
+                    .filter(|wc| {
+                        // Apply regular filters
+                        self.filter_set.matches(wc) &&
+                        // Apply cross-dataset filter
+                        self.should_include_word_cross_dataset(&wc.word, dataset_index)
+                    })
                     .cloned()
                     .collect()
             };
@@ -1083,6 +1251,23 @@ impl App {
 
     fn toggle_single_words_filter(&mut self) {
         self.filter_set.exclude_single = !self.filter_set.exclude_single;
+        self.apply_current_filter_to_all_datasets();
+    }
+
+    fn toggle_cross_dataset_filter(&mut self) {
+        // Only enable cross-dataset filtering if we have multiple datasets
+        if self.datasets.len() <= 1 {
+            return;
+        }
+        
+        self.filter_set.cross_dataset = match self.filter_set.cross_dataset {
+            CrossDatasetFilter::None => CrossDatasetFilter::CommonOnly,
+            CrossDatasetFilter::CommonOnly => CrossDatasetFilter::UniqueOnly,
+            CrossDatasetFilter::UniqueOnly => CrossDatasetFilter::None,
+        };
+        
+        // Mark cache as dirty since we're changing cross-dataset filtering
+        self.cross_dataset_cache_dirty = true;
         self.apply_current_filter_to_all_datasets();
     }
 
@@ -1140,12 +1325,12 @@ impl App {
         
         // Use unified formatting for consistency
         let visible_words = &[]; // Empty for comparison view (no fit calculations needed)
-        let zipf_mode = ZipfMode::Off; // No fit calculations in comparison view
+        let zipf_state = ZipfState::new(); // No fit calculations in comparison view
         let items = Self::format_word_list_items(
             &filtered_word_counts,
             &search_results,
             visible_words,
-            &zipf_mode,
+            &zipf_state,
             &self.normalization_mode,
             self.total_words,
             |_, _| None, // No fit calculations in comparison view
@@ -1182,12 +1367,12 @@ impl App {
         // Use unified formatting for consistency
         let visible_words = &[]; // Empty for comparison view (no fit calculations needed)
         let empty_search_results = Vec::new(); // Inactive datasets don't show search highlights
-        let zipf_mode = ZipfMode::Off; // No fit calculations in comparison view
+        let zipf_state = ZipfState::new(); // No fit calculations in comparison view
         let items = Self::format_word_list_items(
             &words_to_show,
             &empty_search_results,
             visible_words,
-            &zipf_mode,
+            &zipf_state,
             &self.normalization_mode,
             dataset.total_words,
             |_, _| None, // No fit calculations in comparison view
@@ -1234,9 +1419,10 @@ impl App {
             f, 
             area, 
             visible_words, 
-            &self.filtered_word_counts, // Pass active (filtered) word counts
+            &self.filtered_word_counts, // Pass filtered word counts
+            &self.word_counts,          // Pass original word counts
             self.log_scale, 
-            &self.zipf_mode,
+            &self.zipf_state,
             &self.chart_scope,
             self.selected_index,
             visible_start,
@@ -1247,12 +1433,12 @@ impl App {
     fn render_footer(&self, f: &mut Frame, area: Rect) {
         let navigation_line = if self.datasets.len() > 1 {
             if self.chart_mode {
-                "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Chart: L(log) Z(zipf) A(scope) %(normalize) | Datasets: [/] | Mode: C(multi) | Filter: S(stopwords) U(single) F(filter) | /(search) n/N | q(quit)"
+                "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Chart: L(log) Z(zipf on/off) z(zipf mode) A(scope) %(normalize) | Datasets: [/] | Mode: C(multi) | Filter: S(stopwords) U(single) F(filter) X(cross-dataset) | /(search) n/N | q(quit)"
             } else {
-                "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Datasets: Tab/Shift+Tab | Mode: C(chart) | Display: %(normalize) | Filter: S(stopwords) U(single) F(filter) | /(search) n/N | q(quit)"
+                "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Datasets: Tab/Shift+Tab | Mode: C(chart) | Display: %(normalize) | Chart: L(log) Z(zipf on/off) z(zipf mode) A(scope) | Filter: S(stopwords) U(single) F(filter) X(cross-dataset) | /(search) n/N | q(quit)"
             }
         } else {
-            "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Chart: L(log) Z(zipf) A(scope) %(normalize) | Filter: S(stopwords) U(single) F(filter) | /(search) n/N | q(quit)"
+            "Navigation: j/k | g/G/[num]g | Ctrl+u/d/b/f | Chart: L(log) Z(zipf on/off) z(zipf mode) A(scope) %(normalize) | Filter: S(stopwords) U(single) F(filter) X(cross-dataset) | /(search) n/N | q(quit)"
         };
         
         let mut lines = vec![
@@ -1274,16 +1460,29 @@ impl App {
                 chart_status.push(Span::styled("VISIBLE", Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)));
             },
         }
-        match self.zipf_mode {
-            ZipfMode::Absolute => {
-                if !chart_status.is_empty() { chart_status.push(Span::raw(" | ")); }
-                chart_status.push(Span::styled("ZIPF-ABS", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)));
-            },
-            ZipfMode::Relative => {
-                if !chart_status.is_empty() { chart_status.push(Span::raw(" | ")); }
-                chart_status.push(Span::styled("ZIPF-REL", Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)));
-            },
-            ZipfMode::Off => {},
+        if self.zipf_state.enabled {
+            if !chart_status.is_empty() { chart_status.push(Span::raw(" | ")); }
+            
+            let label = match self.chart_scope {
+                ChartScope::Absolute => {
+                    // ALL-DATA scope: just show basis
+                    match self.zipf_state.basis {
+                        ZipfBasis::Filtered => "ZIPF-FLTR",
+                        ZipfBasis::Unfiltered => "ZIPF-RAW",
+                    }
+                },
+                ChartScope::Relative => {
+                    // VISIBLE scope: show basis + reference
+                    match (&self.zipf_state.basis, &self.zipf_state.reference) {
+                        (ZipfBasis::Filtered, ZipfReference::Absolute) => "ZIPF-FLTR-ABS",
+                        (ZipfBasis::Filtered, ZipfReference::Relative) => "ZIPF-FLTR-REL",
+                        (ZipfBasis::Unfiltered, ZipfReference::Absolute) => "ZIPF-RAW-ABS",
+                        (ZipfBasis::Unfiltered, ZipfReference::Relative) => "ZIPF-RAW-REL",
+                    }
+                },
+            };
+            
+            chart_status.push(Span::styled(label, Style::default().fg(Color::Red).add_modifier(Modifier::BOLD)));
         }
         
         // Add normalization mode indicator
@@ -1323,6 +1522,23 @@ impl App {
                 let include_parts: Vec<String> = self.filter_set.include_only_tags.iter().map(|tag| tag.name.clone()).collect();
                 chart_status.push(Span::styled("Only ", Style::default().fg(Color::Green)));
                 chart_status.push(Span::styled(include_parts.join(", "), Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)));
+            }
+            
+            // Add cross-dataset filter status
+            match &self.filter_set.cross_dataset {
+                CrossDatasetFilter::CommonOnly => {
+                    if !filter_parts.is_empty() || !self.filter_set.include_only_tags.is_empty() {
+                        chart_status.push(Span::raw(" | "));
+                    }
+                    chart_status.push(Span::styled("Common Words Only", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)));
+                },
+                CrossDatasetFilter::UniqueOnly => {
+                    if !filter_parts.is_empty() || !self.filter_set.include_only_tags.is_empty() {
+                        chart_status.push(Span::raw(" | "));
+                    }
+                    chart_status.push(Span::styled("Unique Words Only", Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD)));
+                },
+                CrossDatasetFilter::None => {}
             }
         }
         
